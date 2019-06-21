@@ -112,7 +112,7 @@ public class SupplicantStaIfaceHal {
     @VisibleForTesting
     public static final String INIT_SERVICE_NAME = "wpa_supplicant";
     @VisibleForTesting
-    public static final long WAIT_FOR_DEATH_TIMEOUT_MS = 50L;
+    public static final long WAIT_FOR_DEATH_TIMEOUT_MS = 200L;
     /**
      * Regex pattern for extracting the wps device type bytes.
      * Matches a strings like the following: "<categ>-<OUI>-<subcateg>";

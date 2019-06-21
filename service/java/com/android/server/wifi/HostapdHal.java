@@ -56,7 +56,7 @@ public class HostapdHal {
     @VisibleForTesting
     public static final String HAL_INSTANCE_NAME = "default";
     @VisibleForTesting
-    public static final long WAIT_FOR_DEATH_TIMEOUT_MS = 50L;
+    public static final long WAIT_FOR_DEATH_TIMEOUT_MS = 200L;
 
     private final Object mLock = new Object();
     private boolean mVerboseLoggingEnabled = false;
