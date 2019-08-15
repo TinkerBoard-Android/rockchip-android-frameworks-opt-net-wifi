@@ -167,13 +167,19 @@ public class WifiNetworkSelectorTest {
             if (!mEvaluatorShouldSelectCandidate) {
                 return null;
             }
-            ScanDetail scanDetail = scanDetails.get(mNetworkIndexToReturn);
-            mWifiConfigManager.setNetworkCandidateScanResult(0, scanDetail.getScanResult(), 100);
-            WifiConfiguration config =
-                    mWifiConfigManager.getConfiguredNetworkForScanDetailAndCache(scanDetail);
-            assertNotNull("Saved network must not be null", config);
-            onConnectableListener.onConnectable(scanDetail, config, 100);
-            return config;
+            for (ScanDetail scanDetail : scanDetails) {
+                WifiConfiguration config =
+                        mWifiConfigManager.getConfiguredNetworkForScanDetailAndCache(scanDetail);
+                mWifiConfigManager.setNetworkCandidateScanResult(
+                        config.networkId, scanDetail.getScanResult(), 100);
+            }
+            ScanDetail scanDetailToReturn = scanDetails.get(mNetworkIndexToReturn);
+            WifiConfiguration configToReturn  =
+                    mWifiConfigManager.getConfiguredNetworkForScanDetailAndCache(
+                            scanDetailToReturn);
+            assertNotNull("Saved network must not be null", configToReturn);
+            onConnectableListener.onConnectable(scanDetailToReturn, configToReturn, 100);
+            return configToReturn;
         }
     }
 
@@ -537,6 +543,38 @@ public class WifiNetworkSelectorTest {
         ScanResult chosenScanResult = scanDetails.get(0).getScanResult();
         WifiNetworkSelectorTestUtil.verifySelectedScanResult(mWifiConfigManager,
                 chosenScanResult, candidate);
+    }
+
+    /**
+     * Ensure that network selector update's network selection status for all configured
+     * networks before performing network selection.
+     *
+     * Expected behavior: the first network is recommended by Network Selector
+     */
+    @Test
+    public void updateConfiguredNetworks() {
+        String[] ssids = {"\"test1\"", "\"test2\""};
+        String[] bssids = {"6c:f3:7f:ae:8c:f3", "6c:f3:7f:ae:8c:f4"};
+        int[] freqs = {2437, 2457};
+        String[] caps = {"[WPA2-EAP-CCMP][ESS]", "[WPA2-PSK][ESS]"};
+        int[] levels = {mThresholdMinimumRssi2G + 20, mThresholdMinimumRssi2G + RSSI_BUMP};
+        int[] securities = {SECURITY_EAP, SECURITY_PSK};
+
+        ScanDetailsAndWifiConfigs scanDetailsAndConfigs =
+                WifiNetworkSelectorTestUtil.setupScanDetailsAndConfigStore(ssids, bssids,
+                        freqs, caps, levels, securities, mWifiConfigManager, mClock);
+        List<ScanDetail> scanDetails = scanDetailsAndConfigs.getScanDetails();
+        HashSet<String> blacklist = new HashSet<String>();
+        WifiConfiguration[] savedConfigs = scanDetailsAndConfigs.getWifiConfigs();
+
+        // Do network selection.
+        mWifiNetworkSelector.selectNetwork(scanDetails,
+                blacklist, mWifiInfo, true, false, false);
+
+        verify(mWifiConfigManager).getConfiguredNetworks();
+        verify(mWifiConfigManager, times(savedConfigs.length)).tryEnableNetwork(anyInt());
+        verify(mWifiConfigManager, times(savedConfigs.length))
+                .clearNetworkCandidateScanResult(anyInt());
     }
 
     /**
@@ -919,6 +957,39 @@ public class WifiNetworkSelectorTest {
                 false /* not open network */,
                 // Should try to switch.
                 true);
+    }
+
+    /**
+     * New network selection is not performed if the currently connected network
+     * was recently selected.
+     */
+    @Test
+    public void networkIsSufficientWhenRecentlyUserSelected() {
+        // Approximate mClock.getElapsedSinceBootMillis value mocked by testStayOrTryToSwitch
+        long millisSinceBoot = SystemClock.elapsedRealtime()
+                + WifiNetworkSelector.MINIMUM_NETWORK_SELECTION_INTERVAL_MS + 2000;
+        when(mWifiConfigManager.getLastSelectedTimeStamp())
+                .thenReturn(millisSinceBoot
+                        - WifiNetworkSelector.LAST_USER_SELECTION_SUFFICIENT_MS
+                        + 1000);
+        setupWifiConfigManager(0); // testStayOrTryToSwitch first connects to network 0
+        // Rssi after connected.
+        when(mWifiInfo.getRssi()).thenReturn(mThresholdQualifiedRssi2G + 1);
+        // No streaming traffic.
+        mWifiInfo.txSuccessRate = 0.0;
+        mWifiInfo.rxSuccessRate = 0.0;
+
+        testStayOrTryToSwitch(
+                // Parameters for network1:
+                mThresholdQualifiedRssi2G + 1 /* rssi before connected */,
+                false /* not a 5G network */,
+                false /* not open network */,
+                // Parameters for network2:
+                mThresholdQualifiedRssi5G + 1 /* rssi */,
+                true /* a 5G network */,
+                false /* not open network */,
+                // Should not try to switch.
+                false);
     }
 
     /**

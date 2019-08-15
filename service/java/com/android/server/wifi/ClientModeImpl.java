@@ -16,7 +16,6 @@
 
 package com.android.server.wifi;
 
-import static android.net.shared.LinkPropertiesParcelableUtil.toStableParcelable;
 import static android.net.wifi.WifiManager.WIFI_STATE_DISABLED;
 import static android.net.wifi.WifiManager.WIFI_STATE_DISABLING;
 import static android.net.wifi.WifiManager.WIFI_STATE_ENABLED;
@@ -41,6 +40,7 @@ import android.net.KeepalivePacketData;
 import android.net.LinkProperties;
 import android.net.MacAddress;
 import android.net.MatchAllNetworkSpecifier;
+import android.net.NattKeepalivePacketData;
 import android.net.Network;
 import android.net.NetworkAgent;
 import android.net.NetworkCapabilities;
@@ -55,7 +55,7 @@ import android.net.StaticIpConfiguration;
 import android.net.TcpKeepalivePacketData;
 import android.net.ip.IIpClient;
 import android.net.ip.IpClientCallbacks;
-import android.net.ip.IpClientUtil;
+import android.net.ip.IpClientManager;
 import android.net.shared.ProvisioningConfiguration;
 import android.net.wifi.INetworkRequestMatchCallback;
 import android.net.wifi.RssiPacketCountInfo;
@@ -87,6 +87,7 @@ import android.os.UserManager;
 import android.os.WorkSource;
 import android.provider.Settings;
 import android.system.OsConstants;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -159,6 +160,9 @@ public class ClientModeImpl extends StateMachine {
     private static final String EXTRA_OSU_ICON_QUERY_BSSID = "BSSID";
     private static final String EXTRA_OSU_ICON_QUERY_FILENAME = "FILENAME";
     private static final String EXTRA_OSU_PROVIDER = "OsuProvider";
+    private static final String EXTRA_UID = "uid";
+    private static final String EXTRA_PACKAGE_NAME = "PackageName";
+    private static final String EXTRA_PASSPOINT_CONFIGURATION = "PasspointConfiguration";
     private static final int IPCLIENT_TIMEOUT_MS = 10_000;
 
     private boolean mVerboseLoggingEnabled = false;
@@ -395,7 +399,7 @@ public class ClientModeImpl extends StateMachine {
         return true;
     }
 
-    private volatile IIpClient mIpClient;
+    private volatile IpClientManager mIpClient;
     private IpClientCallbacksImpl mIpClientCallbacks;
 
     // Channel for sending replies.
@@ -669,7 +673,7 @@ public class ClientModeImpl extends StateMachine {
 
     /**
      * Time window in milliseconds for which we send
-     * {@link NetworkAgent#explicitlySelected(boolean)}
+     * {@link NetworkAgent#explicitlySelected(boolean, boolean)}
      * after connecting to the network which the user last selected.
      */
     @VisibleForTesting
@@ -902,9 +906,13 @@ public class ClientModeImpl extends StateMachine {
 
         setLogRecSize(NUM_LOG_RECS_NORMAL);
         setLogOnlyTransitions(false);
+    }
 
-        //start the state machine
-        start();
+    @Override
+    public void start() {
+        super.start();
+
+        PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
 
         // Learn the initial state of whether the screen is on.
         // We update this field when we receive broadcasts from the system.
@@ -955,11 +963,7 @@ public class ClientModeImpl extends StateMachine {
 
     private void setMulticastFilter(boolean enabled) {
         if (mIpClient != null) {
-            try {
-                mIpClient.setMulticastFilter(enabled);
-            } catch (RemoteException e) {
-                loge("Error setting multicast filter", e);
-            }
+            mIpClient.setMulticastFilter(enabled);
         }
     }
 
@@ -988,7 +992,7 @@ public class ClientModeImpl extends StateMachine {
 
         @Override
         public void onIpClientCreated(IIpClient ipClient) {
-            mIpClient = ipClient;
+            mIpClient = new IpClientManager(ipClient, getName());
             mWaitForCreationCv.open();
         }
 
@@ -1073,11 +1077,7 @@ public class ClientModeImpl extends StateMachine {
         /* Restore power save and suspend optimizations */
         handlePostDhcpSetup();
         if (mIpClient != null) {
-            try {
-                mIpClient.stop();
-            } catch (RemoteException e) {
-                loge("Error stopping IpClient", e);
-            }
+            mIpClient.stop();
         }
     }
 
@@ -1752,12 +1752,17 @@ public class ClientModeImpl extends StateMachine {
      *
      * @param channel Channel for communicating with the state machine
      * @param config The configuration to add or update
+     * @param packageName Package name of the app adding/updating {@code config}.
      * @return true on success
      */
     public boolean syncAddOrUpdatePasspointConfig(AsyncChannel channel,
-            PasspointConfiguration config, int uid) {
+            PasspointConfiguration config, int uid, String packageName) {
+        Bundle bundle = new Bundle();
+        bundle.putInt(EXTRA_UID, uid);
+        bundle.putString(EXTRA_PACKAGE_NAME, packageName);
+        bundle.putParcelable(EXTRA_PASSPOINT_CONFIGURATION, config);
         Message resultMsg = channel.sendMessageSynchronously(CMD_ADD_OR_UPDATE_PASSPOINT_CONFIG,
-                uid, 0, config);
+                bundle);
         if (messageIsNull(resultMsg)) return false;
         boolean result = (resultMsg.arg1 == SUCCESS);
         resultMsg.recycle();
@@ -2006,7 +2011,9 @@ public class ClientModeImpl extends StateMachine {
      */
     public void dumpIpClient(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (mIpClient != null) {
-            IpClientUtil.dumpIpClient(mIpClient, fd, pw, args);
+            // All dumpIpClient does is print this log message.
+            // TODO: consider deleting this, since it's not useful.
+            pw.println("IpClient logs have moved to dumpsys network_stack");
         }
     }
 
@@ -2591,7 +2598,9 @@ public class ClientModeImpl extends StateMachine {
         mNetworkFactory.handleScreenStateChanged(screenOn);
 
         WifiLockManager wifiLockManager = mWifiInjector.getWifiLockManager();
-        if (wifiLockManager != null) {
+        if (wifiLockManager == null) {
+            Log.w(TAG, "WifiLockManager not initialized, skipping screen state notification");
+        } else {
             wifiLockManager.handleScreenStateChanged(screenOn);
         }
 
@@ -2938,11 +2947,9 @@ public class ClientModeImpl extends StateMachine {
         if (mIpClient != null) {
             Pair<String, String> p = mWifiScoreCard.getL2KeyAndGroupHint(mWifiInfo);
             if (!p.equals(mLastL2KeyAndGroupHint)) {
-                try {
-                    mIpClient.setL2KeyAndGroupHint(p.first, p.second);
+                if (mIpClient.setL2KeyAndGroupHint(p.first, p.second)) {
                     mLastL2KeyAndGroupHint = p;
-                } catch (RemoteException e) {
-                    loge("Failed setL2KeyAndGroupHint");
+                } else {
                     mLastL2KeyAndGroupHint = null;
                 }
             }
@@ -3661,8 +3668,11 @@ public class ClientModeImpl extends StateMachine {
                     replyToMessage(message, message.what);
                     break;
                 case CMD_ADD_OR_UPDATE_PASSPOINT_CONFIG:
-                    int addResult = mPasspointManager.addOrUpdateProvider(
-                            (PasspointConfiguration) message.obj, message.arg1)
+                    Bundle bundle = (Bundle) message.obj;
+                    int addResult = mPasspointManager.addOrUpdateProvider(bundle.getParcelable(
+                            EXTRA_PASSPOINT_CONFIGURATION),
+                            bundle.getInt(EXTRA_UID),
+                            bundle.getString(EXTRA_PACKAGE_NAME))
                             ? SUCCESS : FAILURE;
                     replyToMessage(message, message.what, addResult);
                     break;
@@ -3685,11 +3695,7 @@ public class ClientModeImpl extends StateMachine {
                 case CMD_READ_PACKET_FILTER:
                     byte[] data = mWifiNative.readPacketFilter(mInterfaceName);
                     if (mIpClient != null) {
-                        try {
-                            mIpClient.readPacketFilterComplete(data);
-                        } catch (RemoteException e) {
-                            loge("Error notifying IpClient of packet filter read", e);
-                        }
+                        mIpClient.readPacketFilterComplete(data);
                     }
                     break;
                 case CMD_SET_FALLBACK_PACKET_FILTERING:
@@ -3802,15 +3808,10 @@ public class ClientModeImpl extends StateMachine {
         mIsRunning = false;
         updateBatteryWorkSource(null);
 
-        if (mIpClient != null) {
-            try {
-                mIpClient.shutdown();
-                // Block to make sure IpClient has really shut down, lest cleanup
-                // race with, say, bringup code over in tethering.
-                mIpClientCallbacks.awaitShutdown();
-            } catch (RemoteException e) {
-                loge("Error shutting down IpClient", e);
-            }
+        if (mIpClient != null && mIpClient.shutdown()) {
+            // Block to make sure IpClient has really shut down, lest cleanup
+            // race with, say, bringup code over in tethering.
+            mIpClientCallbacks.awaitShutdown();
         }
         mNetworkInfo.setIsAvailable(false);
         if (mNetworkAgent != null) mNetworkAgent.sendNetworkInfo(mNetworkInfo);
@@ -4077,11 +4078,7 @@ public class ClientModeImpl extends StateMachine {
                     // interest (e.g. routers); harmless if none are configured.
                     if (state == SupplicantState.COMPLETED) {
                         if (mIpClient != null) {
-                            try {
-                                mIpClient.confirmConfiguration();
-                            } catch (RemoteException e) {
-                                loge("Error confirming IpClient configuration", e);
-                            }
+                            mIpClient.confirmConfiguration();
                         }
                         mWifiScoreReport.noteIpCheck();
                     }
@@ -4282,6 +4279,17 @@ public class ClientModeImpl extends StateMachine {
                     String currentMacAddress = mWifiNative.getMacAddress(mInterfaceName);
                     mWifiInfo.setMacAddress(currentMacAddress);
                     Log.i(TAG, "Connecting with " + currentMacAddress + " as the mac address");
+
+                    if (config.enterpriseConfig != null
+                            && TelephonyUtil.isSimEapMethod(config.enterpriseConfig.getEapMethod())
+                            && mWifiInjector.getCarrierNetworkConfig()
+                                    .isCarrierEncryptionInfoAvailable()
+                            && TextUtils.isEmpty(config.enterpriseConfig.getAnonymousIdentity())) {
+                        String anonAtRealm = TelephonyUtil.getAnonymousIdentityWith3GppRealm(
+                                getTelephonyManager());
+                        config.enterpriseConfig.setAnonymousIdentity(anonAtRealm);
+                    }
+
                     if (mWifiNative.connectToNetwork(mInterfaceName, config)) {
                         mWifiMetrics.logStaEvent(StaEvent.TYPE_CMD_START_CONNECT, config);
                         mLastConnectAttemptTimestamp = mClock.getWallClockMillis();
@@ -4368,12 +4376,8 @@ public class ClientModeImpl extends StateMachine {
                             if (result.hasProxyChanged()) {
                                 if (mIpClient != null) {
                                     log("Reconfiguring proxy on connection");
-                                    try {
-                                        mIpClient.setHttpProxy(toStableParcelable(
-                                                getCurrentWifiConfiguration().getHttpProxy()));
-                                    } catch (RemoteException e) {
-                                        loge("Error setting IpClient proxy", e);
-                                    }
+                                    mIpClient.setHttpProxy(
+                                            getCurrentWifiConfiguration().getHttpProxy());
                                 }
                             }
                             if (result.hasIpChanged()) {
@@ -4446,28 +4450,20 @@ public class ClientModeImpl extends StateMachine {
                         // We need to get the updated pseudonym from supplicant for EAP-SIM/AKA/AKA'
                         if (config.enterpriseConfig != null
                                 && TelephonyUtil.isSimEapMethod(
-                                        config.enterpriseConfig.getEapMethod())) {
+                                        config.enterpriseConfig.getEapMethod())
+                                // if using anonymous@<realm>, do not use pseudonym identity on
+                                // reauthentication. Instead, use full authentication using
+                                // anonymous@<realm> followed by encrypted IMSI every time.
+                                // This is because the encrypted IMSI spec does not specify its
+                                // compatibility with the pseudonym identity specified by EAP-AKA.
+                                && !TelephonyUtil.isAnonymousAtRealmIdentity(
+                                        config.enterpriseConfig.getAnonymousIdentity())) {
                             String anonymousIdentity =
                                     mWifiNative.getEapAnonymousIdentity(mInterfaceName);
-                            if (anonymousIdentity != null) {
-                                config.enterpriseConfig.setAnonymousIdentity(anonymousIdentity);
-                            } else {
-                                CarrierNetworkConfig carrierNetworkConfig =
-                                        mWifiInjector.getCarrierNetworkConfig();
-                                if (carrierNetworkConfig.isCarrierEncryptionInfoAvailable()
-                                        && carrierNetworkConfig.isSupportAnonymousIdentity()) {
-                                    // In case of a carrier supporting encrypted IMSI and
-                                    // anonymous identity, we need to send anonymous@realm as
-                                    // EAP-IDENTITY response.
-                                    config.enterpriseConfig.setAnonymousIdentity(
-                                            TelephonyUtil.getAnonymousIdentityWith3GppRealm(
-                                                    getTelephonyManager()));
-                                } else {
-                                    Log.d(TAG, "Failed to get updated anonymous identity"
-                                            + " from supplicant, reset it in WifiConfiguration.");
-                                    config.enterpriseConfig.setAnonymousIdentity(null);
-                                }
+                            if (mVerboseLoggingEnabled) {
+                                log("EAP Pseudonym: " + anonymousIdentity);
                             }
+                            config.enterpriseConfig.setAnonymousIdentity(anonymousIdentity);
                             mWifiConfigManager.addOrUpdateNetwork(config, Process.WIFI_UID);
                         }
                         sendNetworkStateChangeBroadcast(mLastBssid);
@@ -4502,8 +4498,12 @@ public class ClientModeImpl extends StateMachine {
                     replyToMessage(message, message.what, 0);
                     break;
                 case CMD_ADD_OR_UPDATE_PASSPOINT_CONFIG:
-                    PasspointConfiguration passpointConfig = (PasspointConfiguration) message.obj;
-                    if (mPasspointManager.addOrUpdateProvider(passpointConfig, message.arg1)) {
+                    Bundle bundle = (Bundle) message.obj;
+                    PasspointConfiguration passpointConfig = bundle.getParcelable(
+                            EXTRA_PASSPOINT_CONFIGURATION);
+                    if (mPasspointManager.addOrUpdateProvider(passpointConfig,
+                            bundle.getInt(EXTRA_UID),
+                            bundle.getString(EXTRA_PACKAGE_NAME))) {
                         String fqdn = passpointConfig.getHomeSp().getFqdn();
                         if (isProviderOwnedNetwork(mTargetNetworkId, fqdn)
                                 || isProviderOwnedNetwork(mLastNetworkId, fqdn)) {
@@ -4549,8 +4549,8 @@ public class ClientModeImpl extends StateMachine {
                     boolean simPresent = message.arg1 == 1;
                     if (!simPresent) {
                         mPasspointManager.removeEphemeralProviders();
+                        mWifiConfigManager.resetSimNetworks();
                     }
-                    mWifiConfigManager.resetSimNetworks(simPresent);
                     break;
                 case CMD_BLUETOOTH_ADAPTER_STATE_CHANGE:
                     mBluetoothConnectionActive = (message.arg1
@@ -4635,6 +4635,9 @@ public class ClientModeImpl extends StateMachine {
 
     private NetworkCapabilities getCapabilities(WifiConfiguration currentWifiConfiguration) {
         final NetworkCapabilities result = new NetworkCapabilities(mNetworkCapabilitiesFilter);
+        // MatchAllNetworkSpecifier set in the mNetworkCapabilitiesFilter should never be set in the
+        // agent's specifier.
+        result.setNetworkSpecifier(null);
         if (currentWifiConfiguration == null) {
             return result;
         }
@@ -4725,7 +4728,10 @@ public class ClientModeImpl extends StateMachine {
                 case WifiEnterpriseConfig.Eap.AKA:
                 case WifiEnterpriseConfig.Eap.AKA_PRIME:
                     if (errorCode == WifiNative.EAP_SIM_VENDOR_SPECIFIC_CERT_EXPIRED) {
-                        getTelephonyManager().resetCarrierKeysForImsiEncryption();
+                        getTelephonyManager()
+                                .createForSubscriptionId(
+                                        SubscriptionManager.getDefaultDataSubscriptionId())
+                                .resetCarrierKeysForImsiEncryption();
                     }
                     break;
 
@@ -4945,11 +4951,7 @@ public class ClientModeImpl extends StateMachine {
         @Override
         public void exit() {
             if (mIpClient != null) {
-                try {
-                    mIpClient.stop();
-                } catch (RemoteException e) {
-                    loge("Error stopping IpClient", e);
-                }
+                mIpClient.stop();
             }
 
             // This is handled by receiving a NETWORK_DISCONNECTION_EVENT in ConnectModeState
@@ -4985,11 +4987,7 @@ public class ClientModeImpl extends StateMachine {
                     break;
                 case CMD_PRE_DHCP_ACTION_COMPLETE:
                     if (mIpClient != null) {
-                        try {
-                            mIpClient.completedPreDhcpAction();
-                        } catch (RemoteException e) {
-                            loge("Error completing PreDhcpAction", e);
-                        }
+                        mIpClient.completedPreDhcpAction();
                     }
                     break;
                 case CMD_POST_DHCP_ACTION:
@@ -5105,11 +5103,7 @@ public class ClientModeImpl extends StateMachine {
                         mWifiMetrics.updateWifiUsabilityStatsEntries(mWifiInfo, stats);
                         if (mWifiScoreReport.shouldCheckIpLayer()) {
                             if (mIpClient != null) {
-                                try {
-                                    mIpClient.confirmConfiguration();
-                                } catch (RemoteException e) {
-                                    loge("Error confirming IpClient configuration", e);
-                                }
+                                mIpClient.confirmConfiguration();
                             }
                             mWifiScoreReport.noteIpCheck();
                         }
@@ -5203,6 +5197,8 @@ public class ClientModeImpl extends StateMachine {
                         if (TelephonyUtil.isSimConfig(config)) {
                             mWifiMetrics.logStaEvent(StaEvent.TYPE_FRAMEWORK_DISCONNECT,
                                     StaEvent.DISCONNECT_RESET_SIM_NETWORKS);
+                            // TODO(b/132385576): STA may immediately connect back to the network
+                            //  that we just disconnected from
                             mWifiNative.disconnect(mInterfaceName);
                             transitionTo(mDisconnectingState);
                         }
@@ -5223,22 +5219,21 @@ public class ClientModeImpl extends StateMachine {
                 case CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF: {
                     if (mIpClient != null) {
                         final int slot = message.arg1;
-                        final TcpKeepalivePacketData pkt = (TcpKeepalivePacketData) message.obj;
-                        try {
-                            mIpClient.addKeepalivePacketFilter(slot, pkt.toStableParcelable());
-                        } catch (RemoteException e) {
-                            loge("Error adding Keepalive Packet Filter ", e);
+                        if (message.obj instanceof NattKeepalivePacketData) {
+                            final NattKeepalivePacketData pkt =
+                                    (NattKeepalivePacketData) message.obj;
+                            mIpClient.addKeepalivePacketFilter(slot, pkt);
+                        } else if (message.obj instanceof TcpKeepalivePacketData) {
+                            final TcpKeepalivePacketData pkt =
+                                    (TcpKeepalivePacketData) message.obj;
+                            mIpClient.addKeepalivePacketFilter(slot, pkt);
                         }
                     }
                     break;
                 }
                 case CMD_REMOVE_KEEPALIVE_PACKET_FILTER_FROM_APF: {
                     if (mIpClient != null) {
-                        try {
-                            mIpClient.removeKeepalivePacketFilter(message.arg1);
-                        } catch (RemoteException e) {
-                            loge("Error removing Keepalive Packet Filter ", e);
-                        }
+                        mIpClient.removeKeepalivePacketFilter(message.arg1);
                     }
                     break;
                 }
@@ -5334,19 +5329,9 @@ public class ClientModeImpl extends StateMachine {
             stopIpClient();
 
             if (mIpClient != null) {
-                try {
-                    mIpClient.setHttpProxy(toStableParcelable(currentConfig.getHttpProxy()));
-                } catch (RemoteException e) {
-                    loge("Error setting IpClient proxy", e);
-                }
-            }
-            if (!TextUtils.isEmpty(mTcpBufferSizes)) {
-                if (mIpClient != null) {
-                    try {
-                        mIpClient.setTcpBufferSizes(mTcpBufferSizes);
-                    } catch (RemoteException e) {
-                        loge("Error setting IpClient TCP buffer sizes", e);
-                    }
+                mIpClient.setHttpProxy(currentConfig.getHttpProxy());
+                if (!TextUtils.isEmpty(mTcpBufferSizes)) {
+                    mIpClient.setTcpBufferSizes(mTcpBufferSizes);
                 }
             }
             final ProvisioningConfiguration prov;
@@ -5368,11 +5353,7 @@ public class ClientModeImpl extends StateMachine {
                             .build();
             }
             if (mIpClient != null) {
-                try {
-                    mIpClient.startProvisioning(prov.toStableParcelable());
-                } catch (RemoteException e) {
-                    loge("Error starting IpClient provisioning", e);
-                }
+                mIpClient.startProvisioning(prov);
             }
             // Get Link layer stats so as we get fresh tx packet counters
             getWifiLinkLayerStats();
@@ -5416,8 +5397,8 @@ public class ClientModeImpl extends StateMachine {
 
     /**
      * Helper function to check if we need to invoke
-     * {@link NetworkAgent#explicitlySelected(boolean)} to indicate that we connected to a network
-     * which the user just chose
+     * {@link NetworkAgent#explicitlySelected(boolean, boolean)} to indicate that we connected to a
+     * network which the user just chose
      * (i.e less than {@link #LAST_SELECTED_NETWORK_EXPIRATION_AGE_MILLIS) before).
      */
     @VisibleForTesting
@@ -5433,26 +5414,31 @@ public class ClientModeImpl extends StateMachine {
     }
 
     private void sendConnectedState() {
-        // If this network was explicitly selected by the user, evaluate whether to call
-        // explicitlySelected() so the system can treat it appropriately.
+        // If this network was explicitly selected by the user, evaluate whether to inform
+        // ConnectivityService of that fact so the system can treat it appropriately.
         WifiConfiguration config = getCurrentWifiConfiguration();
+
+        boolean explicitlySelected = false;
         if (shouldEvaluateWhetherToSendExplicitlySelected(config)) {
-            boolean prompt =
+            // If explicitlySelected is true, the network was selected by the user via Settings or
+            // QuickSettings. If this network has Internet access, switch to it. Otherwise, switch
+            // to it only if the user confirms that they really want to switch, or has already
+            // confirmed and selected "Don't ask again".
+            explicitlySelected =
                     mWifiPermissionsUtil.checkNetworkSettingsPermission(config.lastConnectUid);
             if (mVerboseLoggingEnabled) {
-                log("Network selected by UID " + config.lastConnectUid + " prompt=" + prompt);
+                log("Network selected by UID " + config.lastConnectUid + " explicitlySelected="
+                        + explicitlySelected);
             }
-            if (prompt) {
-                // Selected by the user via Settings or QuickSettings. If this network has Internet
-                // access, switch to it. Otherwise, switch to it only if the user confirms that they
-                // really want to switch, or has already confirmed and selected "Don't ask again".
-                if (mVerboseLoggingEnabled) {
-                    log("explictlySelected acceptUnvalidated=" + config.noInternetAccessExpected);
-                }
-                if (mNetworkAgent != null) {
-                    mNetworkAgent.explicitlySelected(config.noInternetAccessExpected);
-                }
-            }
+        }
+
+        if (mVerboseLoggingEnabled) {
+            log("explictlySelected=" + explicitlySelected + " acceptUnvalidated="
+                    + config.noInternetAccessExpected);
+        }
+
+        if (mNetworkAgent != null) {
+            mNetworkAgent.explicitlySelected(explicitlySelected, config.noInternetAccessExpected);
         }
 
         setNetworkDetailedState(DetailedState.CONNECTED);

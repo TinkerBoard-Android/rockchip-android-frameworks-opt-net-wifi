@@ -27,7 +27,6 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
-import android.os.Process;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -57,12 +56,22 @@ public class WifiNetworkSelector {
     private static final String TAG = "WifiNetworkSelector";
 
     private static final long INVALID_TIME_STAMP = Long.MIN_VALUE;
+
     /**
      * Minimum time gap between last successful network selection and a
      * new selection attempt.
      */
     @VisibleForTesting
     public static final int MINIMUM_NETWORK_SELECTION_INTERVAL_MS = 10 * 1000;
+
+    /**
+     * For this duration after user selected it, consider the current network as sufficient.
+     *
+     * This delays network selection during the time that connectivity service may be posting
+     * a dialog about a no-internet network.
+     */
+    @VisibleForTesting
+    public static final int LAST_USER_SELECTION_SUFFICIENT_MS = 30_000;
 
     /**
      * Time that it takes for the boost given to the most recently user-selected
@@ -108,8 +117,8 @@ public class WifiNetworkSelector {
     private final WifiNative mWifiNative;
 
     private final Map<String, WifiCandidates.CandidateScorer> mCandidateScorers = new ArrayMap<>();
-    private boolean mIsEasyConnectSupportedInitialized = false;
-    private boolean mIsEasyConnectSupported;
+    private boolean mIsEnhancedOpenSupportedInitialized = false;
+    private boolean mIsEnhancedOpenSupported;
 
     /**
      * WiFi Network Selector supports various categories of networks. Each category
@@ -234,6 +243,14 @@ public class WifiNetworkSelector {
         if (network == null) {
             localLog("Current network was removed.");
             return false;
+        }
+
+        if (mWifiConfigManager.getLastSelectedNetwork() == network.networkId
+                && (mClock.getElapsedSinceBootMillis()
+                    - mWifiConfigManager.getLastSelectedTimeStamp())
+                <= LAST_USER_SELECTION_SUFFICIENT_MS) {
+            localLog("Current network is recently user-selected.");
+            return true;
         }
 
         // OSU (Online Sign Up) network for Passpoint Release 2 is sufficient network.
@@ -420,14 +437,14 @@ public class WifiNetworkSelector {
     }
 
     private boolean isEnhancedOpenSupported() {
-        if (mIsEasyConnectSupportedInitialized) {
-            return mIsEasyConnectSupported;
+        if (mIsEnhancedOpenSupportedInitialized) {
+            return mIsEnhancedOpenSupported;
         }
 
-        mIsEasyConnectSupportedInitialized = true;
-        mIsEasyConnectSupported = (mWifiNative.getSupportedFeatureSet(
+        mIsEnhancedOpenSupportedInitialized = true;
+        mIsEnhancedOpenSupported = (mWifiNative.getSupportedFeatureSet(
                 mWifiNative.getClientInterfaceName()) & WIFI_FEATURE_OWE) != 0;
-        return mIsEasyConnectSupported;
+        return mIsEnhancedOpenSupported;
     }
 
     /**
@@ -544,10 +561,9 @@ public class WifiNetworkSelector {
         String key = selected.configKey();
         // This is only used for setting the connect choice timestamp for debugging purposes.
         long currentTime = mClock.getWallClockMillis();
-        List<WifiConfiguration> savedNetworks = mWifiConfigManager.getSavedNetworks(
-                Process.WIFI_UID);
+        List<WifiConfiguration> configuredNetworks = mWifiConfigManager.getConfiguredNetworks();
 
-        for (WifiConfiguration network : savedNetworks) {
+        for (WifiConfiguration network : configuredNetworks) {
             WifiConfiguration.NetworkSelectionStatus status = network.getNetworkSelectionStatus();
             if (network.networkId == selected.networkId) {
                 if (status.getConnectChoice() != null) {
@@ -570,6 +586,61 @@ public class WifiNetworkSelector {
         }
 
         return change;
+    }
+
+
+    /**
+     * Iterate thru the list of configured networks (includes all saved network configurations +
+     * any ephemeral network configurations created for passpoint networks, suggestions, carrier
+     * networks, etc) and do the following:
+     * a) Try to re-enable any temporarily enabled networks (if the blacklist duration has expired).
+     * b) Clear the {@link WifiConfiguration.NetworkSelectionStatus#getCandidate()} field for all
+     * of them to identify networks that are present in the current scan result.
+     * c) Log any disabled networks.
+     */
+    private void updateConfiguredNetworks() {
+        List<WifiConfiguration> configuredNetworks = mWifiConfigManager.getConfiguredNetworks();
+        if (configuredNetworks.size() == 0) {
+            localLog("No configured networks.");
+            return;
+        }
+
+        StringBuffer sbuf = new StringBuffer();
+        for (WifiConfiguration network : configuredNetworks) {
+            // If a configuration is temporarily disabled, re-enable it before trying
+            // to connect to it.
+            mWifiConfigManager.tryEnableNetwork(network.networkId);
+            // Clear the cached candidate, score and seen.
+            mWifiConfigManager.clearNetworkCandidateScanResult(network.networkId);
+
+            // Log disabled network.
+            WifiConfiguration.NetworkSelectionStatus status = network.getNetworkSelectionStatus();
+            if (!status.isNetworkEnabled()) {
+                sbuf.append("  ").append(toNetworkString(network)).append(" ");
+                for (int index = WifiConfiguration.NetworkSelectionStatus
+                        .NETWORK_SELECTION_DISABLED_STARTING_INDEX;
+                        index < WifiConfiguration.NetworkSelectionStatus
+                                .NETWORK_SELECTION_DISABLED_MAX;
+                        index++) {
+                    int count = status.getDisableReasonCounter(index);
+                    // Here we log the reason as long as its count is greater than zero. The
+                    // network may not be disabled because of this particular reason. Logging
+                    // this information anyway to help understand what happened to the network.
+                    if (count > 0) {
+                        sbuf.append("reason=")
+                                .append(WifiConfiguration.NetworkSelectionStatus
+                                        .getNetworkDisableReasonString(index))
+                                .append(", count=").append(count).append("; ");
+                    }
+                }
+                sbuf.append("\n");
+            }
+        }
+
+        if (sbuf.length() > 0) {
+            localLog("Disabled configured networks:");
+            localLog(sbuf.toString());
+        }
     }
 
     /**
@@ -644,6 +715,9 @@ public class WifiNetworkSelector {
         if (!isNetworkSelectionNeeded(scanDetails, wifiInfo, connected, disconnected)) {
             return null;
         }
+
+        // Update all configured networks before initiating network selection.
+        updateConfiguredNetworks();
 
         // Update the registered network evaluators.
         for (NetworkEvaluator registeredEvaluator : mEvaluators) {
