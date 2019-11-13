@@ -227,7 +227,7 @@ public class ClientModeImpl extends StateMachine {
     private String mLastBssid;
     private int mLastNetworkId; // The network Id we successfully joined
 
-    private boolean mIpReachabilityDisconnectEnabled = true;
+    private boolean mIpReachabilityDisconnectEnabled = false;
 
     private void processRssiThreshold(byte curRssi, int reason,
             WifiNative.WifiRssiEventHandler rssiHandler) {

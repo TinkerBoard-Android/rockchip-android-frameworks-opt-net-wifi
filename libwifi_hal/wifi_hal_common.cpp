@@ -111,6 +111,7 @@ enum {
     KERNEL_VERSION_3_0_36,
     KERNEL_VERSION_3_10,
     KERNEL_VERSION_4_4,
+    KERNEL_VERSION_4_19,
 };
 
 static const char RECOGNIZE_WIFI_CHIP[] = "/data/misc/wifi/wifi_chip";
@@ -182,7 +183,10 @@ int get_kernel_version(void)
     } else if (strstr(buf, "Linux version 4.4") != NULL) {
 	version = KERNEL_VERSION_4_4;
 	PLOG(ERROR) << "Kernel version is 4.4.";
-    } else {
+    } else if (strstr(buf, "Linux version 4.19") != NULL) {
+	version = KERNEL_VERSION_4_19;
+	PLOG(ERROR) << "Kernel version is 4.19.";
+    }else {
         version = KERNEL_VERSION_3_0_36;
         PLOG(ERROR) << "Kernel version is 3.0.36.";
     }
@@ -199,7 +203,8 @@ int check_wireless_ready(void)
 	char line[1024];
 	FILE *fp = NULL;
 
-	if (get_kernel_version() == KERNEL_VERSION_4_4) {
+	if (get_kernel_version() == KERNEL_VERSION_4_4 ||
+			get_kernel_version() == KERNEL_VERSION_4_19) {
 		fp = fopen("/proc/net/dev", "r");
 		if (fp == NULL) {
 			PLOG(ERROR) << "Couldn't open /proc/net/dev";
