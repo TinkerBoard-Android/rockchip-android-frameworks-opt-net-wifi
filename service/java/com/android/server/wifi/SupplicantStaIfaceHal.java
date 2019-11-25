@@ -667,7 +667,6 @@ public class SupplicantStaIfaceHal {
             if (isV1_1()) {
                 Log.i(TAG, "Terminating supplicant using HIDL");
                 terminate_V1_1();
-		mPropertyService.set(INIT_STOP_PROPERTY, INIT_SERVICE_NAME);
             } else {
                 Log.i(TAG, "Terminating supplicant using init");
                 mPropertyService.set(INIT_STOP_PROPERTY, INIT_SERVICE_NAME);
