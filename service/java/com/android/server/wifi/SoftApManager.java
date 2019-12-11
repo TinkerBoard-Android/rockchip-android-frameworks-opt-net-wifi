@@ -97,6 +97,8 @@ public class SoftApManager implements ActiveModeManager {
 
     private long mStartTimestamp = -1;
 
+    private BaseWifiDiagnostics mWifiDiagnostics;
+
     /**
      * Listener for soft AP events.
      */
@@ -129,7 +131,8 @@ public class SoftApManager implements ActiveModeManager {
                          @NonNull WifiApConfigStore wifiApConfigStore,
                          @NonNull SoftApModeConfiguration apConfig,
                          @NonNull WifiMetrics wifiMetrics,
-                         @NonNull SarManager sarManager) {
+                         @NonNull SarManager sarManager,
+                         @NonNull BaseWifiDiagnostics wifiDiagnostics) {
         mContext = context;
         mFrameworkFacade = framework;
         mWifiNative = wifiNative;
@@ -145,6 +148,7 @@ public class SoftApManager implements ActiveModeManager {
         }
         mWifiMetrics = wifiMetrics;
         mSarManager = sarManager;
+        mWifiDiagnostics = wifiDiagnostics;
         mStateMachine = new SoftApStateMachine(looper);
 	PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
 	mSoftApWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SoftAp");
@@ -291,6 +295,7 @@ public class SoftApManager implements ActiveModeManager {
             Log.e(TAG, "Soft AP start failed");
             return ERROR_GENERIC;
         }
+        mWifiDiagnostics.startLogging(mApInterfaceName);
         mStartTimestamp = SystemClock.elapsedRealtime();
 	if (!mSoftApWakeLock.isHeld()) {
 	    Log.d(TAG,"---- mSoftApWakeLock.acquire ----");
@@ -305,6 +310,7 @@ public class SoftApManager implements ActiveModeManager {
      * Teardown soft AP and teardown the interface.
      */
     private void stopSoftAp() {
+        mWifiDiagnostics.stopLogging(mApInterfaceName);
         mWifiNative.teardownInterface(mApInterfaceName);
 	if (mSoftApWakeLock.isHeld()) {
 		Log.d(TAG,"---- mSoftApWakeLock.release ----");
