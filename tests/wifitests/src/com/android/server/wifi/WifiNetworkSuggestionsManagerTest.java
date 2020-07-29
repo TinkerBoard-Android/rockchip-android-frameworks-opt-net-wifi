@@ -340,8 +340,8 @@ public class WifiNetworkSuggestionsManagerTest {
                 TEST_PACKAGE_1);
         removingSuggestion.wifiConfiguration.SSID = networkSuggestion1.wifiConfiguration.SSID;
         assertEquals(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS,
-                mWifiNetworkSuggestionsManager.remove(Arrays.asList(removingSuggestion),
-                        TEST_PACKAGE_1));
+                mWifiNetworkSuggestionsManager.remove(new ArrayList<>(),
+                        TEST_UID_1, TEST_PACKAGE_1));
         verify(mWifiKeyStore).removeKeys(any());
     }
     /**

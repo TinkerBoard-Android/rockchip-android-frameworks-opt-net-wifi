@@ -648,7 +648,6 @@ public class WifiNetworkSuggestionsManager {
             perAppInfo.extNetworkSuggestions.removeAll(extNetworkSuggestions);
         } else {
             // empty list is used to clear everything for the app. Store a copy for use below.
-            extNetworkSuggestions = new HashSet<>(perAppInfo.extNetworkSuggestions);
             perAppInfo.extNetworkSuggestions.clear();
         }
         if (perAppInfo.extNetworkSuggestions.isEmpty()) {
