@@ -230,7 +230,8 @@ public class PasspointManagerTest extends WifiBaseTest {
         mHandler = new Handler(mLooper.getLooper());
         mManager = new PasspointManager(mContext, mWifiInjector, mHandler, mWifiNative,
                 mWifiKeyStore, mClock, mObjectFactory, mWifiConfigManager,
-                mWifiConfigStore, mWifiMetrics, mWifiCarrierInfoManager, mMacAddressUtil, mWifiPermissionsUtil);
+                mWifiConfigStore, mWifiMetrics, mWifiCarrierInfoManager, mMacAddressUtil,
+                mWifiPermissionsUtil);
         ArgumentCaptor<PasspointEventHandler.Callbacks> callbacks =
                 ArgumentCaptor.forClass(PasspointEventHandler.Callbacks.class);
         verify(mObjectFactory).makePasspointEventHandler(any(WifiNative.class),
@@ -779,7 +780,8 @@ public class PasspointManagerTest extends WifiBaseTest {
                 .thenReturn(true);
         PasspointManager ut = new PasspointManager(mContext, mWifiInjector, mHandler, mWifiNative,
                 mWifiKeyStore, mClock, spyFactory, mWifiConfigManager,
-                mWifiConfigStore, mWifiMetrics, mWifiCarrierInfoManager, mMacAddressUtil, mWifiPermissionsUtil);
+                mWifiConfigStore, mWifiMetrics, mWifiCarrierInfoManager, mMacAddressUtil,
+                mWifiPermissionsUtil);
 
         assertTrue(ut.addOrUpdateProvider(config, TEST_CREATOR_UID, TEST_PACKAGE,
                 true, true));
