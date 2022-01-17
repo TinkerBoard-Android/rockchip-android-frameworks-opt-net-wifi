@@ -131,6 +131,7 @@ static wifi_device supported_wifi_devices[] = {
 	{"RTL8814AU",   "7392:a834"},
 	{"RTL8814AU",   "7392:a833"},
 	{"RTL8814AU",   "20f4:809a"},
+	{"RTL8852BE",   "10ec:b852"},
 };
 
 int get_wifi_device_id(const char *bus_dir, const char *prefix)
