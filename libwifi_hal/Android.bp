@@ -60,6 +60,7 @@ soong_config_string_variable {
         "emulator",
         "rtl",
         "slsi",
+	"auto",
         "wlan0",
     ],
 }
@@ -178,6 +179,9 @@ wifi_cc_defaults {
             slsi: {
                 whole_static_libs: ["libwifi-hal-slsi"],
             },
+	    auto: {
+		whole_static_libs: ["libwifi-hal-auto"],
+	    },
             conditions_default: {
                 whole_static_libs: ["libwifi-hal-fallback"],
             },
@@ -223,6 +227,7 @@ cc_library_shared {
         "liblog",
         "libnl",
         "libutils",
+	"librkwifi-ctrl",
     ],
     srcs: [
         "driver_tool.cpp",
@@ -422,3 +427,37 @@ wifi_makefile_goal {
         },
     },
 }
+
+wifi_hal_cflags = [
+    "-Wall",
+    "-Werror",
+    "-Wextra",
+    "-Winit-self",
+    "-Wno-unused-function",
+    "-Wno-unused-parameter",
+    "-Wshadow",
+    "-Wunused-variable",
+    "-Wwrite-strings",
+]
+
+cc_library_shared {
+    name: "librkwifi-ctrl",
+    vendor: true,
+    cflags: wifi_hal_cflags,
+    local_include_dirs: ["include"],
+    shared_libs: ["libbase"],
+    header_libs: ["libcutils_headers"],
+    srcs: ["rk_wifi_ctrl.cpp"],
+}
+
+cc_library_static {
+    name: "librkwifi-ctrl-static",
+    recovery_available: true,
+    cflags: wifi_hal_cflags,
+    local_include_dirs: ["include"],
+    export_include_dirs: ["include"],
+    shared_libs: ["libbase"],
+    header_libs: ["libcutils_headers"],
+    srcs: ["rk_wifi_ctrl.cpp"],
+}
+
