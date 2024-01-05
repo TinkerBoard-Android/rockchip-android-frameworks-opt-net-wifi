@@ -68,6 +68,7 @@ static char wifi_type[64] = {0};
 #define SPRDWL_DRIVER_MODULE_PATH        WIFI_MODULE_PATH"sprdwl_ng.ko"
 #define BES2600_DRIVER_MODULE_PATH        WIFI_MODULE_PATH"bes2600.ko"
 #define AIC8800_DRIVER_MODULE_PATH        WIFI_MODULE_PATH"aic8800_fdrv.ko"
+#define SKW6160_DRIVER_MODULE_PATH       WIFI_MODULE_PATH"skw.ko"
 
 #define RTL8188EU_DRIVER_MODULE_NAME     "8188eu"
 #define RTL8723BU_DRIVER_MODULE_NAME     "8723bu"
@@ -94,6 +95,7 @@ static char wifi_type[64] = {0};
 #define SPRDWL_DRIVER_MODULE_NAME        "sprdwl"
 #define BES2600_DRIVER_MODULE_NAME       "bes2600"
 #define AIC8800_DRIVER_MODULE_NAME        "aic8800_bsp"
+#define SKW6160_DRIVER_MODULE_NAME       "skw"
 
 #define UNKOWN_DRIVER_MODULE_ARG ""
 #define SSV6051_DRIVER_MODULE_ARG "stacfgpath=/vendor/etc/firmware/ssv6051-wifi.cfg"
@@ -104,6 +106,7 @@ static char wifi_type[64] = {0};
 #define SPRD_WIFI_HAL "libwifi-hal-sprd.so"
 #define BES_WIFI_HAL "libwifi-hal-bes.so"
 #define AIC_WIFI_HAL "libwifi-hal-aic.so"
+#define SKW_WIFI_HAL "libwifi-hal-skw.so"
 
 typedef struct _wifi_devices
 {
@@ -146,10 +149,14 @@ static wifi_device supported_wifi_devices[] = {
 	{"AP6255",      "02d0:a9bf"},
 	{"RTL8822BE",	"10ec:b822"},
 	{"MVL88W8977",	"02df:9145"},
-	{"SPRDWL",	"0000:0000"},
+	//{"SPRDWL",	"0000:0000"},
 	{"BES2600",	"be57:2002"},
 	{"AIC8800",	"5449:0145"},
 	{"AIC8800",     "c8a1:0082"},
+	{"SKW6160",     "0483:5720"},
+	{"SKW6160",     "0483:5721"},
+	{"SKW6160",     "0000:0000"},
+	{"SKW6160",     "3607:6160"},
 
 };
 
@@ -184,6 +191,7 @@ const wifi_file_name module_list[] =
 	{"SPRDWL",          SPRDWL_DRIVER_MODULE_NAME, SPRDWL_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, SPRD_WIFI_HAL},
 	{"BES2600",          BES2600_DRIVER_MODULE_NAME, BES2600_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BES_WIFI_HAL},
 	{"AIC8800",          AIC8800_DRIVER_MODULE_NAME, AIC8800_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, AIC_WIFI_HAL},
+	{"SKW6160",     SKW6160_DRIVER_MODULE_NAME,   SKW6160_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, SKW_WIFI_HAL},
 };
 
 int get_wifi_device_id(const char *bus_dir, const char *prefix)
