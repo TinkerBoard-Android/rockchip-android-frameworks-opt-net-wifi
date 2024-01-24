@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+//----rk-code-------
 #include "hardware_legacy/rk_wifi.h"
 
 #include <fcntl.h>
@@ -69,6 +70,7 @@ static char wifi_type[64] = {0};
 #define BES2600_DRIVER_MODULE_PATH        WIFI_MODULE_PATH"bes2600.ko"
 #define AIC8800_DRIVER_MODULE_PATH        WIFI_MODULE_PATH"aic8800_fdrv.ko"
 #define SKW6160_DRIVER_MODULE_PATH       WIFI_MODULE_PATH"skw.ko"
+#define CYW88459_DRIVER_MODULE_PATH      WIFI_MODULE_PATH"cyw88459.ko"
 
 #define RTL8188EU_DRIVER_MODULE_NAME     "8188eu"
 #define RTL8723BU_DRIVER_MODULE_NAME     "8723bu"
@@ -96,6 +98,7 @@ static char wifi_type[64] = {0};
 #define BES2600_DRIVER_MODULE_NAME       "bes2600"
 #define AIC8800_DRIVER_MODULE_NAME        "aic8800"
 #define SKW6160_DRIVER_MODULE_NAME       "skw"
+#define CYW88459_DRIVER_MODULE_NAME       "cyw88459"
 
 #define UNKOWN_DRIVER_MODULE_ARG ""
 #define SSV6051_DRIVER_MODULE_ARG "stacfgpath=/vendor/etc/firmware/ssv6051-wifi.cfg"
@@ -157,6 +160,7 @@ static wifi_device supported_wifi_devices[] = {
 	{"SKW6160",     "0483:5721"},
 	{"SKW6160",     "0000:0000"},
 	{"SKW6160",     "3607:6160"},
+	{"CYW88459",    "14e4:4415"},
 
 };
 
@@ -192,6 +196,7 @@ const wifi_file_name module_list[] =
 	{"BES2600",          BES2600_DRIVER_MODULE_NAME, BES2600_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BES_WIFI_HAL},
 	{"AIC8800",          AIC8800_DRIVER_MODULE_NAME, AIC8800_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, AIC_WIFI_HAL},
 	{"SKW6160",     SKW6160_DRIVER_MODULE_NAME,   SKW6160_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, SKW_WIFI_HAL},
+	{"CYW88459",   CYW88459_DRIVER_MODULE_NAME,  CYW88459_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 };
 
 int get_wifi_device_id(const char *bus_dir, const char *prefix)
@@ -337,3 +342,4 @@ const char *get_wifi_hal_name(void)
 	}
 	return NULL;
 }
+//----rk-code-------
