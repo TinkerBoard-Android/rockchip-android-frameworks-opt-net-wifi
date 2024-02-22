@@ -94,7 +94,7 @@ static char wifi_type[64] = {0};
 #define RK912_DRIVER_MODULE_NAME         "rk912"
 #define SPRDWL_DRIVER_MODULE_NAME        "sprdwl"
 #define BES2600_DRIVER_MODULE_NAME       "bes2600"
-#define AIC8800_DRIVER_MODULE_NAME        "aic8800_bsp"
+#define AIC8800_DRIVER_MODULE_NAME        "aic8800"
 #define SKW6160_DRIVER_MODULE_NAME       "skw"
 
 #define UNKOWN_DRIVER_MODULE_ARG ""

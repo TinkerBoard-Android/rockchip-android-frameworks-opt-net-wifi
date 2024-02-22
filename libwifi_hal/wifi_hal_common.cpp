@@ -37,7 +37,7 @@ extern "C" int delete_module(const char *, unsigned int);
 #define SKW6160_BOOTCOMS_MODULE_PATH	 WIFI_MODULE_PATH"skw_bootcoms.ko"
 #define MVL_DRIVER_MODULE_NAME           "sd8xxx"
 #define BCM_DRIVER_MODULE_NAME           "bcmdhd"
-#define AIC8800_DRIVER_MODULE_NAME	 "aic8800_bsp"
+#define AIC8800_DRIVER_MODULE_NAME	 "aic8800"
 #define SKW6160_DRIVER_MODULE_NAME       "skw"
 
 #ifndef WIFI_DRIVER_FW_PATH_STA
