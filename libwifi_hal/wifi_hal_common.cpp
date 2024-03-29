@@ -39,6 +39,11 @@ extern "C" int delete_module(const char *, unsigned int);
 #define BCM_DRIVER_MODULE_NAME           "bcmdhd"
 #define AIC8800_DRIVER_MODULE_NAME	 "aic8800_bsp"
 #define SKW6160_DRIVER_MODULE_NAME       "skw"
+#define RTW88_8822CE_DRIVER_MODULE_NAME "rtw88_8822ce"
+#define RTW88_CORE_MODULE_PATH     WIFI_MODULE_PATH"rtw88_core.ko"
+#define RTW88_PCIE_MODULE_PATH     WIFI_MODULE_PATH"rtw88_pci.ko"
+#define RTW88_8822C_MODULE_PATH     WIFI_MODULE_PATH"rtw88_8822c.ko"
+
 
 #ifndef WIFI_DRIVER_FW_PATH_STA
 #define WIFI_DRIVER_FW_PATH_STA NULL
@@ -304,6 +309,13 @@ int wifi_load_driver() {
 	if (strstr(wifi_ko_path, SKW6160_DRIVER_MODULE_NAME)) {
 		insmod(SKW6160_SDIO_MODULE_PATH, "");
 		insmod(SKW6160_BOOTCOMS_MODULE_PATH, "");
+		usleep(200000);
+	}
+
+	if (strstr(wifi_ko_path, RTW88_8822CE_DRIVER_MODULE_NAME)) {
+		insmod(RTW88_CORE_MODULE_PATH, "");
+		insmod(RTW88_PCIE_MODULE_PATH, "");
+		insmod(RTW88_8822C_MODULE_PATH, "");
 		usleep(200000);
 	}
 
