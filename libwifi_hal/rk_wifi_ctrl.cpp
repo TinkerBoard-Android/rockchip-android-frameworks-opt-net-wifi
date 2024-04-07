@@ -19,6 +19,7 @@
 
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -199,6 +200,25 @@ const wifi_file_name module_list[] =
 	{"CYW88459",   CYW88459_DRIVER_MODULE_NAME,  CYW88459_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 };
 
+int strncmp_case_insensitive(const char *str1, const char *str2, size_t n) {
+	char buf1[n + 1];
+	char buf2[n + 1];
+	size_t i;
+
+	strncpy(buf1, str1, n);
+	strncpy(buf2, str2, n);
+
+	for (i = 0; i < n; ++i) {
+		buf1[i] = tolower(buf1[i]);
+		buf2[i] = tolower(buf2[i]);
+	}
+
+	buf1[n] = '\0';
+	buf2[n] = '\0';
+
+	return strncmp(buf1, buf2, n);
+}
+
 int get_wifi_device_id(const char *bus_dir, const char *prefix)
 {
 	int idnum;
@@ -245,7 +265,7 @@ int get_wifi_device_id(const char *bus_dir, const char *prefix)
 				sprintf(temp, "%04x:%04x", product_vid, product_did);
 				PLOG(ERROR) << "pid:vid :" << temp;
 				for (i = 0; i < idnum; i++) {
-					if (0 == strncmp(temp, supported_wifi_devices[i].wifi_vid_pid, 9)) {
+					if (0 == strncmp_case_insensitive(temp, supported_wifi_devices[i].wifi_vid_pid, 9)) {
 						PLOG(ERROR) << "found device pid:vid :" << temp;
 						strcpy(recoginze_wifi_chip, supported_wifi_devices[i].wifi_name);
 						identify_sucess = 1 ;
