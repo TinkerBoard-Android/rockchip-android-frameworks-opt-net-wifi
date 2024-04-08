@@ -142,6 +142,7 @@ static wifi_device supported_wifi_devices[] = {
 	{"RTL8192DU",	"0bda:8194"},
 	{"RTL8812AU",	"0bda:8812"},
 	{"RTL8821CS",	"024c:c821"},
+	{"RTL8822BE",   "10ec:b822"},
         {"RTL8822CU",   "0bda:c82c"},
 	{"RTL8822CS",   "024c:c822"},
 	{"SSV6051",	"3030:3030"},
@@ -150,8 +151,13 @@ static wifi_device supported_wifi_devices[] = {
 	{"AP6330",	"02d0:4330"},
 	{"AP6356S",	"02d0:4356"},
 	{"AP6335",	"02d0:4335"},
+	{"AP6212",      "02d0:a9a6"},
 	{"AP6255",      "02d0:a9bf"},
-	{"RTL8822BE",	"10ec:b822"},
+	{"AP6275S",     "02d0:aae8"},
+	{"AP6275P",     "14e4:449d"},
+	{"AP6276P",     "14e4:44a0"},
+	{"AP6398S",     "02d0:4359"},
+	{"AP6611S",     "06CB:AABF"},
 	{"MVL88W8977",	"02df:9145"},
 	//{"SPRDWL",	"0000:0000"},
 	{"BES2600",	"be57:2002"},
@@ -189,7 +195,13 @@ const wifi_file_name module_list[] =
 	{"AP6330",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"AP6354",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"AP6356S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6212",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"AP6255",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6275S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6275P",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6276P",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6398S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6611S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"APXXX",           BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"MVL88W8977",      MVL_DRIVER_MODULE_NAME,       MVL_DRIVER_MODULE_PATH, MVL88W8977_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"RK912",         RK912_DRIVER_MODULE_NAME,     RK912_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
@@ -238,7 +250,7 @@ int get_wifi_device_id(const char *bus_dir, const char *prefix)
 		char line[256];
 		char uevent_file[256] = {0};
 		sprintf(uevent_file, "%s/%s/uevent", bus_dir, next->d_name);
-		PLOG(DEBUG) << "uevent path:" << uevent_file;
+		PLOG(INFO) << "uevent path:" << uevent_file;
 		fp = fopen(uevent_file, "r");
 		if (NULL == fp) {
 			continue;
@@ -289,13 +301,13 @@ int check_wifi_chip_type_string(char *type)
 {
 	if (identify_sucess == -1) {
 		if (get_wifi_device_id(SDIO_DIR, PREFIX_SDIO) == 0)
-			PLOG(DEBUG) << "SDIO WIFI identify sucess";
+			PLOG(INFO) << "SDIO WIFI identify sucess";
 		else if (get_wifi_device_id(USB_DIR, PREFIX_USB) == 0)
-			PLOG(DEBUG) << "USB WIFI identify sucess";
+			PLOG(INFO) << "USB WIFI identify sucess";
 		else if (get_wifi_device_id(PCIE_DIR, PREFIX_PCIE) == 0)
-			PLOG(DEBUG) << "PCIE WIFI identify sucess";
+			PLOG(INFO) << "PCIE WIFI identify sucess";
 		else {
-			PLOG(DEBUG) << "maybe there is no usb wifi or sdio or pcie wifi,set default wifi module Brocom APXXX";
+			PLOG(ERROR) << "maybe there is no usb wifi or sdio or pcie wifi,set default wifi module Brocom APXXX";
 			strcpy(recoginze_wifi_chip, "APXXX");
 			identify_sucess = 1 ;
 		}
