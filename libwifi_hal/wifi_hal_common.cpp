@@ -37,7 +37,7 @@ extern "C" int delete_module(const char *, unsigned int);
 #define SKW6160_BOOTCOMS_MODULE_PATH	 WIFI_MODULE_PATH"skw_bootcoms.ko"
 #define MVL_DRIVER_MODULE_NAME           "sd8xxx"
 #define BCM_DRIVER_MODULE_NAME           "bcmdhd"
-#define AIC8800_DRIVER_MODULE_NAME	 "aic8800_bsp"
+#define AIC8800_DRIVER_MODULE_NAME	 "aic8800"
 #define SKW6160_DRIVER_MODULE_NAME       "skw"
 #define RTW88_8822CE_DRIVER_MODULE_NAME "rtw88_8822ce"
 #define RTW88_CORE_MODULE_PATH     WIFI_MODULE_PATH"rtw88_core.ko"
@@ -398,7 +398,7 @@ int wifi_change_fw_path(const char *fwpath) {
 
   if (wifi_type[0] == 0)
 	check_wifi_chip_type_string(wifi_type);
-  if (0 != strncmp(wifi_type, "AP", 2)) return ret;
+  return ret;
   if (!fwpath) return ret;
   fd = TEMP_FAILURE_RETRY(open(WIFI_DRIVER_FW_PATH_PARAM, O_WRONLY));
   if (fd < 0) {

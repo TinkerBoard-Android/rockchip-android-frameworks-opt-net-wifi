@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
+//----rk-code-------
 #include "hardware_legacy/rk_wifi.h"
 
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -72,6 +74,7 @@ static char wifi_type[64] = {0};
 #define BES2600_DRIVER_MODULE_PATH        WIFI_MODULE_PATH"bes2600.ko"
 #define AIC8800_DRIVER_MODULE_PATH        WIFI_MODULE_PATH"aic8800_fdrv.ko"
 #define SKW6160_DRIVER_MODULE_PATH       WIFI_MODULE_PATH"skw.ko"
+#define CYW88459_DRIVER_MODULE_PATH      WIFI_MODULE_PATH"cyw88459.ko"
 
 #define RTL8188EU_DRIVER_MODULE_NAME     "8188eu"
 #define RTL8723BU_DRIVER_MODULE_NAME     "8723bu"
@@ -100,8 +103,9 @@ static char wifi_type[64] = {0};
 #define RK912_DRIVER_MODULE_NAME         "rk912"
 #define SPRDWL_DRIVER_MODULE_NAME        "sprdwl"
 #define BES2600_DRIVER_MODULE_NAME       "bes2600"
-#define AIC8800_DRIVER_MODULE_NAME        "aic8800_bsp"
+#define AIC8800_DRIVER_MODULE_NAME        "aic8800"
 #define SKW6160_DRIVER_MODULE_NAME       "skw"
+#define CYW88459_DRIVER_MODULE_NAME       "cyw88459"
 
 #define UNKOWN_DRIVER_MODULE_ARG ""
 #define SSV6051_DRIVER_MODULE_ARG "stacfgpath=/vendor/etc/firmware/ssv6051-wifi.cfg"
@@ -144,6 +148,7 @@ static wifi_device supported_wifi_devices[] = {
 	{"RTL8192DU",	"0bda:8194"},
 	{"RTL8812AU",	"0bda:8812"},
 	{"RTL8821CS",	"024c:c821"},
+	{"RTL8822BE",   "10ec:b822"},
         {"RTL8822CU",   "0bda:c82c"},
 	{"RTL8822CS",   "024c:c822"},
 	{"SSV6051",	"3030:3030"},
@@ -152,7 +157,13 @@ static wifi_device supported_wifi_devices[] = {
 	{"AP6330",	"02d0:4330"},
 	{"AP6356S",	"02d0:4356"},
 	{"AP6335",	"02d0:4335"},
+	{"AP6212",      "02d0:a9a6"},
 	{"AP6255",      "02d0:a9bf"},
+	{"AP6275S",     "02d0:aae8"},
+	{"AP6275P",     "14e4:449d"},
+	{"AP6276P",     "14e4:44a0"},
+	{"AP6398S",     "02d0:4359"},
+	{"AP6611S",     "06CB:AABF"},
 	{"RTL8822BE",	"10ec:b822"},
 	{"RTL8822CE",   "10ec:c822"},
 	{"RTL8852BE",   "10ec:b852"},
@@ -166,6 +177,7 @@ static wifi_device supported_wifi_devices[] = {
 	{"SKW6160",     "0483:5721"},
 	{"SKW6160",     "0000:0000"},
 	{"SKW6160",     "3607:6160"},
+	{"CYW88459",    "14e4:4415"},
 
 };
 
@@ -196,7 +208,13 @@ const wifi_file_name module_list[] =
 	{"AP6330",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"AP6354",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"AP6356S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6212",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"AP6255",          BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6275S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6275P",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6276P",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6398S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
+	{"AP6611S",         BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"APXXX",           BCM_DRIVER_MODULE_NAME,       BCM_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"MVL88W8977",      MVL_DRIVER_MODULE_NAME,       MVL_DRIVER_MODULE_PATH, MVL88W8977_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 	{"RK912",         RK912_DRIVER_MODULE_NAME,     RK912_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
@@ -204,7 +222,27 @@ const wifi_file_name module_list[] =
 	{"BES2600",          BES2600_DRIVER_MODULE_NAME, BES2600_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BES_WIFI_HAL},
 	{"AIC8800",          AIC8800_DRIVER_MODULE_NAME, AIC8800_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, AIC_WIFI_HAL},
 	{"SKW6160",     SKW6160_DRIVER_MODULE_NAME,   SKW6160_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, SKW_WIFI_HAL},
+	{"CYW88459",   CYW88459_DRIVER_MODULE_NAME,  CYW88459_DRIVER_MODULE_PATH, UNKOWN_DRIVER_MODULE_ARG, BROADCOM_WIFI_HAL},
 };
+
+int strncmp_case_insensitive(const char *str1, const char *str2, size_t n) {
+	char buf1[n + 1];
+	char buf2[n + 1];
+	size_t i;
+
+	strncpy(buf1, str1, n);
+	strncpy(buf2, str2, n);
+
+	for (i = 0; i < n; ++i) {
+		buf1[i] = tolower(buf1[i]);
+		buf2[i] = tolower(buf2[i]);
+	}
+
+	buf1[n] = '\0';
+	buf2[n] = '\0';
+
+	return strncmp(buf1, buf2, n);
+}
 
 int get_wifi_device_id(const char *bus_dir, const char *prefix)
 {
@@ -225,7 +263,7 @@ int get_wifi_device_id(const char *bus_dir, const char *prefix)
 		char line[256];
 		char uevent_file[256] = {0};
 		sprintf(uevent_file, "%s/%s/uevent", bus_dir, next->d_name);
-		PLOG(DEBUG) << "uevent path:" << uevent_file;
+		PLOG(INFO) << "uevent path:" << uevent_file;
 		fp = fopen(uevent_file, "r");
 		if (NULL == fp) {
 			continue;
@@ -252,7 +290,7 @@ int get_wifi_device_id(const char *bus_dir, const char *prefix)
 				sprintf(temp, "%04x:%04x", product_vid, product_did);
 				PLOG(ERROR) << "pid:vid :" << temp;
 				for (i = 0; i < idnum; i++) {
-					if (0 == strncmp(temp, supported_wifi_devices[i].wifi_vid_pid, 9)) {
+					if (0 == strncmp_case_insensitive(temp, supported_wifi_devices[i].wifi_vid_pid, 9)) {
 						PLOG(ERROR) << "found device pid:vid :" << temp;
 						strcpy(recoginze_wifi_chip, supported_wifi_devices[i].wifi_name);
 						identify_sucess = 1 ;
@@ -276,13 +314,13 @@ int check_wifi_chip_type_string(char *type)
 {
 	if (identify_sucess == -1) {
 		if (get_wifi_device_id(SDIO_DIR, PREFIX_SDIO) == 0)
-			PLOG(DEBUG) << "SDIO WIFI identify sucess";
+			PLOG(INFO) << "SDIO WIFI identify sucess";
 		else if (get_wifi_device_id(USB_DIR, PREFIX_USB) == 0)
-			PLOG(DEBUG) << "USB WIFI identify sucess";
+			PLOG(INFO) << "USB WIFI identify sucess";
 		else if (get_wifi_device_id(PCIE_DIR, PREFIX_PCIE) == 0)
-			PLOG(DEBUG) << "PCIE WIFI identify sucess";
+			PLOG(INFO) << "PCIE WIFI identify sucess";
 		else {
-			PLOG(DEBUG) << "maybe there is no usb wifi or sdio or pcie wifi,set default wifi module Brocom APXXX";
+			PLOG(ERROR) << "maybe there is no usb wifi or sdio or pcie wifi,set default wifi module Brocom APXXX";
 			strcpy(recoginze_wifi_chip, "APXXX");
 			identify_sucess = 1 ;
 		}
@@ -349,3 +387,4 @@ const char *get_wifi_hal_name(void)
 	}
 	return NULL;
 }
+//----rk-code-------
